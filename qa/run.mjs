@@ -166,6 +166,8 @@ try {
   // はじめて：遊び方が出る・文字の大きさ
   const p = await newPage();
   check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
+  { const t = await browser.newContext(); const r = await t.newPage(); await r.goto(url); await r.waitForTimeout(150); await r.click("#howto-ok"); await r.reload(); await r.waitForTimeout(150);
+    check("遊び方を「わかった」で閉じてすぐ読み直しても出ない", await r.locator("#howto[open]").count() === 0); await t.close(); }
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
   check("遊び方を Esc で閉じても、開き直したとき出ない", await p.locator("#howto[open]").count() === 0 && await p.evaluate(() => JSON.parse(localStorage.getItem("okane-v1") || "{}").tut === true));
   await p.reload(); await p.waitForTimeout(150);
