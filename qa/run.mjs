@@ -166,6 +166,12 @@ try {
   // はじめて：遊び方が出る・文字の大きさ
   const p = await newPage();
   check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
+  { const c = await browser.newContext(); const r = await c.newPage(); await r.goto(url); await r.waitForTimeout(200); let again = 0;
+    for (let i = 0; i < 10; i++) { await r.evaluate(() => localStorage.clear()); await r.reload(); await r.waitForTimeout(200); await r.keyboard.press("Escape"); await r.reload(); await r.waitForTimeout(200); again += await r.locator("#howto[open]").count(); }
+    check("遊び方を Esc で閉じてすぐ読み直しても出ない（10回）", again === 0);
+    await r.evaluate(() => localStorage.clear()); await r.reload(); await r.waitForTimeout(200);
+    check("「わかった」を押したその場で「見た」が残る", await r.locator("#howto-ok").evaluate((b) => { b.click(); return Object.keys(localStorage).some((k) => { try { return JSON.parse(localStorage.getItem(k)).tut === true; } catch { return false; } }); }));
+    await r.reload(); await r.waitForTimeout(200); check("遊び方を「わかった」で閉じてすぐ読み直しても出ない（その場で残す）", await r.locator("#howto[open]").count() === 0); await c.close(); }
   { const t = await browser.newContext(); const r = await t.newPage(); await r.goto(url); await r.waitForTimeout(150); await r.click("#howto-ok"); await r.reload(); await r.waitForTimeout(150);
     check("遊び方を「わかった」で閉じてすぐ読み直しても出ない", await r.locator("#howto[open]").count() === 0); await t.close(); }
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
