@@ -529,7 +529,7 @@ function home() {
     <button class="main" id="go-d">${done ? "今日の結果を見る" : rd ? `続きから（${rd.res.length + 1}問目）` : `今日の5問 <small>第${dayNo(k)}回</small>`}</button>
     ${done ? `<button class="main alt" id="go-h">${hdone ? "上級の結果を見る" : rh ? "上級の続きから" : "上級：むずかしい3問（ヒントなし）"}</button>` : ""}
     <button class="main alt" id="go-e">${re ? `とことんの続きから（${re.res.length + 1}問目）` : "とことん：好きなだけ解く"}${s.ebest ? ` <small>自己ベスト ${s.ebest}問</small>` : ""}</button>
-    ${(s.runs.r && s.runs.r.date === k && !doneOf(s.runs.r) ? s.runs.r : null) ? `<button class="main alt" id="go-r">復習の続きから（${s.runs.r.res.length + 1}問目）</button>` : rv ? `<button class="main alt" id="go-r">復習 ${rv}問 <small>まちがえた問題がもどってきた</small></button>` : ""}
+    ${(s.runs.r && !doneOf(s.runs.r) ? s.runs.r : null) ? `<button class="main alt" id="go-r">復習の続きから（${s.runs.r.res.length + 1}問目）</button>` : rv ? `<button class="main alt" id="go-r">復習 ${rv}問 <small>まちがえた問題がもどってきた</small></button>` : ""}
     <div class="row"><button class="sub" id="go-p">練習（何度でも）</button><button class="sub" id="go-dex">しくみ帳 ${nk}/${G.KINDS.length}</button></div>
     <div class="row"><button class="sub" id="go-cal" aria-label="カレンダー${late.length ? `（あとから遊べる日 ${late.length}）` : ""}">カレンダー${late.length ? ` <span class="badge">▶${late.length}</span>` : ""}</button><button class="sub" id="go-ach">実績 ${ag}/${ACH.length}</button></div>
     <div class="stats"><div><b>${playedDays(s)}</b><small>遊んだ日</small></div><div><b>${solvedAll(s)}</b><small>解いた問題</small></div><div><b>${st >= 1 ? st : "—"}</b><small>${st >= 1 ? "続けて" : "続けた日"}</small></div></div>
@@ -567,7 +567,8 @@ function startRun(mode, opt) {
       return;
     }
     // 復習：日の来た問題（depth.js）。種類をまぜて多くて10問。今日の記録・連続・Ko-fi には数えない
-    if (mode === "r") { const r0 = s.runs.r; if (r0 && r0.date === k && !doneOf(r0)) return; const list = Depth.due().filter((t) => G.BY[t.split("|")[0]]); if (!list.length) { ng = "r"; return; } s.runs.r = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s) }; return; }
+    // 途中の復習は、日が替わっても続きから（新しい回で上書きしない。2026-11-11 CodeRabbit）
+    if (mode === "r") { const r0 = s.runs.r; if (r0 && !doneOf(r0)) return; const list = Depth.due().filter((t) => G.BY[t.split("|")[0]]); if (!list.length) { ng = "r"; return; } s.runs.r = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s) }; return; }
     if (mode === "e") { const re = s.runs.e; if (re && !doneOf(re)) return; s.runs.e = { mode, date: k, list: endlessList(), res: [], cur: null, id: rid(), a0: achGot(s) }; return; }
     if (mode !== "p" && s.runs[mode] && s.runs[mode].date === k) return; // 続きから
     if ((mode === "d" && s.days[k]) || (mode === "h" && s.hdays[k])) return; // 別のタブで今日の分を終えていたら、もう一度は始めない
