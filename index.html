@@ -346,6 +346,7 @@ const SITE = "https://satou-aaaaa.github.io/okane-kihon/";
 const FEEDBACK = "https://github.com/satou-aaaaa/okane-kihon/issues/new?template=feedback.yml";
 const KEY = "okane-v1", FSKEY = "okane-fs", EPOCH = "2026-11-07";
 const G = window.OKANE, LV = G.LV;
+Depth.setValid((t) => { if (!Object.prototype.hasOwnProperty.call(G.BY, String(t).split("|")[0])) return false; G.make(t); return true; }); // 作り直せない鍵（引き継ぎ・消えた種類）は復習に数えない
 
 // ---- 文字の大きさ（この端末だけ。記録とは別に置く。はじめは「大きい」）----
 function fsGet() { try { const v = +localStorage.getItem(FSKEY); return v >= 1 && v <= 3 ? v : 2; } catch (e) { return 2; } }

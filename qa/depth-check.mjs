@@ -9,6 +9,8 @@
 //   mix:     今日出す復習は種類が続かない・多くて10問
 //   nosave:  保存に失敗しても開いているあいだは覚え、saveWarn(true) を呼ぶ。保存できるようになったら合わせて書く
 //   junk:    壊れた記録（配列・文字・変な日付）でも止まらず、空の形に直す
+//   proto:   鍵が constructor・__proto__・toString でも止まらず、ふつうの鍵として数える（2026-11-11 CodeRabbit）
+//   valid:   setValid で作り直せないと言われた鍵は数えず、出さない（引き継ぎで入った・種類が消えた鍵）
 //   offline: 外へ通信する書き方が無い
 import vm from "node:vm";
 import { readFileSync } from "node:fs";
@@ -111,6 +113,22 @@ export async function checkDepth(code) {
       let s = null; try { s = t.D.stats(); t.D.due(); } catch (e) { s = null; }
       ok(`junk: 壊れた記録 ${v} でも止まらない`, s && s.sure >= 0 && s.sureOk <= s.sure);
     }
+
+    // proto
+    const pj = JSON.stringify({ rv: { "constructor|x": { s: 0, due: "2026-11-01", t: 1 }, "toString": { s: 0, due: "2026-11-01", t: 2 }, "hasOwnProperty|y": { s: 0, due: "2026-11-01", t: 3 } } });
+    t = boot(code, { ls: store({ "t-depth": pj }) });
+    let pc = -1; try { pc = t.D.count(); t.D.mark("constructor|z", 1); t.D.mark("__proto__", 1); t.D.mark("valueOf|1", 0); } catch (e) { pc = -1; }
+    ok("proto: constructor などの鍵でも止まらず数える", pc === 3);
+    ok("proto: constructor|z は復習に入り、__proto__ は入れない", t.D.waiting() === 4);
+
+    // valid
+    t = boot(code);
+    t.D.mark("ok|1", 1); t.D.mark("gone|1", 1); t.D.mark("ok|2", 1);
+    t.D.setValid((k) => k.startsWith("ok|")); t.day(1);
+    const vd = t.D.due();
+    ok("valid: 作り直せない鍵は数えない・出さない", t.D.count() === 2 && vd.every((k) => k.startsWith("ok|")));
+    t.D.setValid(() => { throw new Error("x"); });
+    ok("valid: 確かめる関数が止まっても、出さないだけで止まらない", t.D.count() === 0);
   } catch (e) {
     errors.push("depth.js を動かすと止まった: " + (e && e.message));
   }

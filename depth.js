@@ -1,5 +1,5 @@
 // 深さの部品（depth.js）：1問の中に2つ目の判断を足す「自信をかける」と、まちがえた問題が間をあけて戻る「復習」。
-// 深さの版: 1
+// 深さの版: 2
 // 正：satou-aaaaa/shared-workflows の template/depth.js（各ゲームはこれをそのまま写す。直すときはひな形を直して配り、版を上げる）
 // 考え（routines/game-dev.md「1問を深くする」）:
 //   - 自信をかける：答える前に「たしか」を押せる（押さなければ「たぶん」）。自分の見立てが当たったかが2つ目の勝負になる。
@@ -18,6 +18,7 @@
 //   復習： 問題が終わったら Depth.mark(鍵, まちがい＋ヒントの数, 名前) を呼ぶ（0なら、復習中の問題を次の間へ進める。1以上なら復習に入れる。
 //          自信ありでまちがえた問題は、まちがいの数にかかわらず入る）。
 //          Depth.due() → 今日出す鍵の並び（種類をまぜる・多くて10）。Depth.count() → 今日出す数（ホームのボタンに「復習 N問」）。
+//          Depth.setValid(鍵 → 作り直せるか) を最初に1回呼ぶ（引き継ぎで入った・種類が消えた鍵を数えず、出さない）。
 // 守ること: 外へ通信しない。保存に失敗したら開いているあいだだけ覚え、ゲームの saveWarn があれば帯を出す。
 //          保存の前に読み直す（ほかのタブの分を消さない）。今日のお題・上級の並びには触らない（F7）。
 (function () {
@@ -30,13 +31,15 @@
   var MAX = 300; // 復習に置いておく数の上限（古いものから捨てる）
   var DUE_MAX = 10; // 1日に出す復習の数
   var kindOf = typeof cfg.kindOf === "function" ? cfg.kindOf : function (k) { return String(k).split("|")[0]; };
+  var valid = function () { return true; }; // 作り直せる鍵か（ゲームが setValid で渡す）
   var mem = null; // 保存できないあいだの控え
   var last = null; // いまの問題の { key, sure, ok }（自信ありでまちがえたら、mark で復習に入れる）
   var today = function () { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); };
   var addDays = function (d, n) { return new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10); };
   var num = function (v) { return Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0; };
   var okDate = function (v) { return typeof v === "string" && /^\d{4}-\d\d-\d\d$/.test(v) && Number.isFinite(Date.parse(v + "T00:00:00Z")); };
-  var fresh = function () { return { v: 1, rv: {}, sure: 0, sureOk: 0, learned: 0 }; };
+  // rv はプロトタイプの無い辞書にする（鍵が constructor・__proto__ などでも、もとからある値と混ざらない）
+  var fresh = function () { return { v: 1, rv: Object.create(null), sure: 0, sureOk: 0, learned: 0 }; };
 
   // 形を直す（引き継ぎコードなどから入った値で画面を壊さない）
   function tidy(s) {
@@ -47,7 +50,7 @@
     var list = [];
     for (var k in rv) {
       var x = rv[k];
-      if (!Object.prototype.hasOwnProperty.call(rv, k) || typeof k !== "string" || k.length > 200 || !x || typeof x !== "object" || !okDate(x.due)) continue;
+      if (!Object.prototype.hasOwnProperty.call(rv, k) || typeof k !== "string" || k === "__proto__" || k.length > 200 || !x || typeof x !== "object" || !okDate(x.due)) continue;
       list.push([k, { s: Math.min(num(x.s), GAPS.length - 1), due: x.due, t: num(x.t), lab: typeof x.lab === "string" ? x.lab.slice(0, 60) : "" }]);
     }
     list.sort(function (a, b) { return b[1].t - a[1].t; });
@@ -78,6 +81,7 @@
   // ---- 復習 ----
   function mark(key, miss, label) {
     key = String(key);
+    if (key === "__proto__") return;
     var bad = num(miss) > 0 || (last && last.key === key && last.sure && !last.ok);
     var now = Date.now(), d = today();
     write(function (s) {
@@ -91,14 +95,16 @@
   // 今日出す鍵：日の来たものを古い順に取り、種類が続かないように並べる
   function due() {
     var s = read(), d = today(), list = [];
-    for (var k in s.rv) if (s.rv[k].due <= d) list.push([k, s.rv[k]]);
+    for (var k in s.rv) if (s.rv[k].due <= d && okKey(k)) list.push([k, s.rv[k]]);
     list.sort(function (a, b) { return a[1].due < b[1].due ? -1 : a[1].due > b[1].due ? 1 : a[1].t - b[1].t; });
-    var groups = {}, order = [];
+    var groups = Object.create(null), order = [];
     list.forEach(function (e) { var g = kindOf(e[0]); if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(e[0]); });
     var out = [];
     while (out.length < Math.min(DUE_MAX, list.length)) order.forEach(function (g) { if (groups[g].length && out.length < DUE_MAX) out.push(groups[g].shift()); });
     return out;
   }
+  function okKey(k) { try { return !!valid(k); } catch (e) { return false; } }
+  function setValid(fn) { valid = typeof fn === "function" ? fn : function () { return true; }; }
   function count() { return due().length; }
   function waiting() { var s = read(); return Object.keys(s.rv).length; }
 
@@ -151,5 +157,5 @@
   }
   if (document.head) style(); else document.addEventListener("DOMContentLoaded", style);
 
-  window.Depth = { VERSION: 1, KEY: KEY, GAPS: GAPS, mark: mark, due: due, count: count, waiting: waiting, sureHtml: sureHtml, bindSure: bindSure, judge: judge, runStart: runStart, runStats: runStats, stats: stats, _tidy: tidy };
+  window.Depth = { VERSION: 2, KEY: KEY, GAPS: GAPS, mark: mark, due: due, count: count, waiting: waiting, setValid: setValid, sureHtml: sureHtml, bindSure: bindSure, judge: judge, runStart: runStart, runStats: runStats, stats: stats, _tidy: tidy };
 })();

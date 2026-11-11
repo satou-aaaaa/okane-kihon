@@ -76,10 +76,12 @@ const SOLVE = {
   // ひねりの思いちがい：税率を1つにしてしまう・税金を引き忘れる・月ぎめを引き忘れる
   const tmis = [];
   for (let s = 0; s < 300; s++) {
+    const t = G.make(`taxmix|m${s}`);
+    for (const rate of [110, 108]) { const v = Math.round((t.p.pa + t.p.pb) * rate / 100); if (Math.abs(v - t.ans) / Math.max(v, t.ans) >= 0.005 && !t.opts.includes(v)) tmis.push(`taxmix:全部${rate - 100}%`); }
     const a = G.make(`rishizei|m${s}`); if (!a.opts.includes(a.p.P * a.p.r / 100)) tmis.push("rishizei:税を引き忘れ");
     const c = G.make(`chokinsub|m${s}`), plain = Math.ceil(c.p.T / c.p.X); if (plain !== c.ans && !c.opts.includes(plain)) tmis.push("chokinsub:月ぎめを引き忘れ");
   }
-  check("ひねりの選び肢に、よくある思いちがい（税の引き忘れ・月ぎめの引き忘れ）が入る", tmis.length === 0, [...new Set(tmis)].join(","));
+  check("ひねりの選び肢に、よくある思いちがい（全部同じ税率・税の引き忘れ・月ぎめの引き忘れ）が入る", tmis.length === 0, [...new Set(tmis)].join(","));
   // よくある思いちがいが選び肢に入る（学ぶ中身そのものを選び肢にする）
   const mis = [];
   for (let s = 0; s < 300; s++) {
@@ -143,7 +145,7 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
 try { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   { const st = await checkSwStall(sw); check("PWA：本文の途中で通信が止まっても4秒で保存したものを返す・ふつうはネットの返事", st.ok, JSON.stringify(st)); }
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
-  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、外へ何も送らない", ["./index.html", "./gen.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js・深さの depth.js も）、外へ何も送らない", ["./index.html", "./gen.js", "./transfer.js", "./depth.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "お金のきほん" && mf.icons.length >= 2 && mf.start_url === "./"); }
 catch (e) { check("PWA：sw.js と manifest.webmanifest を読めて形式が正しい", false, e.message.split("\n")[0]); }
 
@@ -389,6 +391,10 @@ try {
     check("復習で一度で正解すると、次は3日後へ進む", Object.values(dp2.rv).every((x) => x.s === 1 && x.due > TODAY));
     await q.goto(url); await q.waitForTimeout(150);
     check("復習を終えたら、ホームの「復習」は消える", await q.locator("#go-r").count() === 0);
+    // 引き継ぎなどで作り直せない鍵が入っても、ホームは止まらず数えない（2026-11-11 CodeRabbit）
+    await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("okane-depth")); d.rv["nai|1"] = { s: 0, due: "2026-01-01", t: 1 }; d.rv["constructor|x"] = { s: 0, due: "2026-01-01", t: 2 }; localStorage.setItem("okane-depth", JSON.stringify(d)); });
+    await q.goto(url); await q.waitForTimeout(150);
+    check("作り直せない鍵（無い種類・constructor）は復習に数えず、ホームも出る", await q.locator("#go-d").count() === 1 && await q.locator("#go-r").count() === 0);
     await q.context().close();
   }
   // スマホ幅・とても大きい文字でもはみ出さない・押す所は44px以上
