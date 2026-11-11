@@ -396,6 +396,14 @@ try {
     await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("okane-depth")); d.rv["nai|1"] = { s: 0, due: "2026-01-01", t: 1 }; d.rv["constructor|x"] = { s: 0, due: "2026-01-01", t: 2 }; localStorage.setItem("okane-depth", JSON.stringify(d)); });
     await q.goto(url); await q.waitForTimeout(150);
     check("作り直せない鍵（無い種類・constructor）は復習に数えず、ホームも出る", await q.locator("#go-d").count() === 1 && await q.locator("#go-r").count() === 0);
+    // 復習の途中でヒント・まちがいがあって日の来た問題が0になっても、ホームの「復習の続きから」で戻れる（2026-11-11 CodeRabbit）
+    { const rk = Object.keys(dp2.rv)[0];
+      await q.evaluate((k) => { const d = JSON.parse(localStorage.getItem("okane-depth")); d.rv = { [k]: { s: 0, due: "2026-01-01", t: 3 } }; localStorage.setItem("okane-depth", JSON.stringify(d)); }, rk);
+      await q.goto(url); await q.waitForTimeout(150); await q.click("#go-r"); await q.click("#hint");
+      await q.goto(url); await q.waitForTimeout(150);
+      check("復習の途中でヒントを使って日の来た問題が0になっても、ホームの「復習の続きから」で戻れる", ((await q.locator("#go-r").count()) ? await q.textContent("#go-r") : "").includes("続きから"));
+      if (await q.locator("#go-r").count()) { await q.click("#go-r"); check("復習の続きは同じ問題・使ったヒントはそのまま", await q.evaluate(() => __km.cur().tag) === rk && await q.evaluate(() => __km.cur().hints) === 1); }
+    }
     await q.context().close();
   }
   // スマホ幅・とても大きい文字でもはみ出さない・押す所は44px以上
