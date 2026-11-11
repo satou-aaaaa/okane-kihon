@@ -400,8 +400,9 @@ try {
     { const rk = Object.keys(dp2.rv)[0];
       await q.evaluate((k) => { const d = JSON.parse(localStorage.getItem("okane-depth")); d.rv = { [k]: { s: 0, due: "2026-01-01", t: 3 } }; localStorage.setItem("okane-depth", JSON.stringify(d)); }, rk);
       await q.goto(url); await q.waitForTimeout(150); await q.click("#go-r"); await q.click("#hint");
+      await q.evaluate(() => __km.save((s) => { s.runs.r.date = "2026-01-02"; }));
       await q.goto(url); await q.waitForTimeout(150);
-      check("復習の途中でヒントを使って日の来た問題が0になっても、ホームの「復習の続きから」で戻れる", ((await q.locator("#go-r").count()) ? await q.textContent("#go-r") : "").includes("続きから"));
+      check("復習の途中でヒントを使って日の来た問題が0になっても・日が替わっても、ホームの「復習の続きから」で戻れる", ((await q.locator("#go-r").count()) ? await q.textContent("#go-r") : "").includes("続きから"));
       if (await q.locator("#go-r").count()) { await q.click("#go-r"); check("復習の続きは同じ問題・使ったヒントはそのまま", await q.evaluate(() => __km.cur().tag) === rk && await q.evaluate(() => __km.cur().hints) === 1); }
     }
     await q.context().close();
