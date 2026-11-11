@@ -371,6 +371,7 @@ try {
     check("自信のボタンを押すと ✓ が出る（色だけで分けない）", (await q.getAttribute("#dp-sure", "aria-pressed")) === "true" && (await q.textContent("#dp-sure")).includes("✓"));
     await q.click(`.ch[data-j="${await wrongIdx(q)}"]`);
     check("自信ありでまちがえると「思いこみ」と出て、自信は変えられない", (await q.textContent("#msg")).includes("思いこみ") && await q.locator("#dp-sure:disabled").count() === 1);
+    check("まちがえたその時に復習へ入る（解き終えずにやめても残る。2026-11-11 CodeRabbit）", await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("okane-depth") || "{}"); return !!(d.rv && d.rv[__km.cur().tag]); }));
     await q.reload(); await q.waitForTimeout(150); await q.evaluate(() => __km.play("p"));
     await solve(q);
     check("開き直しても、自信ありでまちがえたことが正解の画面に出る", (await q.textContent(".verdict")).includes("自信ありでまちがえた"));
