@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
 import { checkSwStall } from "./sw-check.mjs";
+import { checkDepth } from "./depth-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -46,6 +47,9 @@ const SOLVE = {
   ribo2x: ({ B, X, r }) => round[100](riboSim(B, X, r).fee - riboSim(B, X * 2, r).fee),
   bunribo: ({ B, X, r }) => round[100](riboSim(B, X, r).total - bunSim(B, 12, r)),
   loan: ({ B, X, r }) => round[100](riboSim(B, X, r).fee),
+  taxmix: ({ pa, pb }) => Math.round(pa * 1.08 + pb * 1.1),
+  rishizei: ({ P, r }) => { const I = (P * r) / 100; return I - Math.floor(I * 0.15315 + 1e-9) - Math.floor(I * 0.05 + 1e-9); },
+  chokinsub: ({ T, X, Y }) => Math.ceil(T / (X - Y)),
 };
 {
   const bad = {}, seen = {}, N = 2000;
@@ -68,7 +72,16 @@ const SOLVE = {
   const few = G.KINDS.filter((k) => seen[k.id].size < 8).map((k) => `${k.id}:${seen[k.id].size}`);
   const total = G.KINDS.reduce((a, k) => a + seen[k.id].size, 0);
   check("問題：どの種類も8通り以上・全部で300通り以上（好きなだけ遊んでも同じ問題ばかりにならない）", few.length === 0 && total >= 300, few.join(",") + ` 全部${total}通り`);
-  check("問題：種類は18（やさしい5・ふつう7・むずかしい6）", G.KINDS.length === 18 && [0, 1, 2].map((l) => G.kindsOf(l).length).join() === "5,7,6");
+  check("問題：種類は21（やさしい5・ふつう7・むずかしい6・ひねり3）", G.KINDS.length === 21 && [0, 1, 2].map((l) => G.kindsOf(l).length).join() === "5,7,6" && G.twistKinds().length === 3);
+  // ひねりの思いちがい：税率を1つにしてしまう・税金を引き忘れる・月ぎめを引き忘れる
+  const tmis = [];
+  for (let s = 0; s < 300; s++) {
+    const t = G.make(`taxmix|m${s}`);
+    for (const rate of [110, 108]) { const v = Math.round((t.p.pa + t.p.pb) * rate / 100); if (Math.abs(v - t.ans) / Math.max(v, t.ans) >= 0.005 && !t.opts.includes(v)) tmis.push(`taxmix:全部${rate - 100}%`); }
+    const a = G.make(`rishizei|m${s}`); if (!a.opts.includes(a.p.P * a.p.r / 100)) tmis.push("rishizei:税を引き忘れ");
+    const c = G.make(`chokinsub|m${s}`), plain = Math.ceil(c.p.T / c.p.X); if (plain !== c.ans && !c.opts.includes(plain)) tmis.push("chokinsub:月ぎめを引き忘れ");
+  }
+  check("ひねりの選び肢に、よくある思いちがい（全部同じ税率・税の引き忘れ・月ぎめの引き忘れ）が入る", tmis.length === 0, [...new Set(tmis)].join(","));
   // よくある思いちがいが選び肢に入る（学ぶ中身そのものを選び肢にする）
   const mis = [];
   for (let s = 0; s < 300; s++) {
@@ -95,6 +108,10 @@ const SOLVE = {
     const d = new Date(d0 + i * 864e5).toISOString().slice(0, 10), dl = G.dailyTags(d), hl = G.hardTags(d);
     const dk = dl.map((t) => t.split("|")[0]), hk = hl.map((t) => t.split("|")[0]);
     if (dl.length !== 5 || new Set(dk).size !== 5 || dk.map((k) => G.BY[k].lv).join() !== "0,0,1,1,2") bad.push(d + " 今日");
+    // ひねり：TWIST_FROM からは4問目だけがひねり。ほかの4問と、それより前の日は前の作り方と同じ（過去の日の問題を変えない。F7）
+    { const R = G.rng(G.seedOf("day:" + d)), old = [...G.pickN(R, G.kindsOf(0), 2), ...G.pickN(R, G.kindsOf(1), 2), ...G.pickN(R, G.kindsOf(2), 1)];
+      const tw = d >= G.TWIST_FROM;
+      if (dk.some((k, j) => j !== 3 && k !== old[j]) || (tw ? !G.twistKinds().includes(dk[3]) : dk[3] !== old[3])) bad.push(d + " ひねり"); }
     if (hl.length !== 3 || new Set(hk).size !== 3 || hk.some((k) => G.BY[k].lv !== 2) || hk.includes(dk[4])) bad.push(d + " 上級");
     if (JSON.stringify(dl) !== JSON.stringify(G.dailyTags(d))) bad.push(d + " 同じにならない");
     if ([...dl, ...hl].some((t) => !G.make(t))) bad.push(d + " 作れない");
@@ -102,7 +119,7 @@ const SOLVE = {
     if (i < 60) [...dk, ...hk].forEach((k) => cover.add(k));
   }
   check("今日の5問（やさしい2・ふつう2・むずかしい1、種類は重ねない）と上級（むずかしい3・今日のむずかしいと別）を3年分作れる", bad.length === 0, bad.slice(0, 5).join(","));
-  check("2か月のうちに18種類が全部出る・前の日と同じ組の日が少ない", cover.size === 18 && sameAsPrev < 20, `${cover.size}種類・前の日と同じ ${sameAsPrev}日`);
+  check(`2か月のうちに${G.KINDS.length}種類が全部出る・前の日と同じ組の日が少ない`, cover.size === G.KINDS.length && sameAsPrev < 20, `${cover.size}種類・前の日と同じ ${sameAsPrev}日`);
 }
 
 // ---- 2. ファイルの中身 ----
@@ -117,7 +134,7 @@ check("言い方：特定の商品・投資をすすめない（「買うべき�
 check("言い方：「このゲームについて」に計算のしかた・助言でないこと・相談先（188）・出典がある", /元利均等/.test(html) && /投資の助言/.test(html) && /188/.test(html) && /j-fsa\.or\.jp/.test(html) && /j-flec\.go\.jp/.test(html) && /nta\.go\.jp/.test(html));
 check("実在の会社・カードの名前を出さない", !/JCB|VISA|Visa|Mastercard|楽天|PayPay|三井住友|アコム|プロミス|アイフル|イオン/.test(html + gen));
 check("画面にお笑いの言葉を入れない（本物っぽく）", !/お笑い|ギャグ|ツッコミ|なんでやねん|（うそ）/.test(html));
-check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキーだけで読む", /<script src="transfer\.js" data-game="okane-kihon" data-keys="okane-v1,okane-fs"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="gen.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
+check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキー（記録・文字・復習）だけで読む・depth.js も前に読む", /<script src="transfer\.js" data-game="okane-kihon" data-keys="okane-v1,okane-fs,okane-depth"><\/script>\s*<script src="depth\.js" data-game="okane-kihon" data-key="okane-depth"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="gen.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
 { const og = (k) => (html.match(new RegExp(`<meta (?:property|name)="${k}" content="([^"]+)"`)) || [])[1] || "";
   const png = readFileSync(path.join(root, "og.png"));
   check("SNS で貼ると絵と題が出る（OGP・1200×630・絶対URL）", og("og:title") && og("og:description") && og("og:image") === "https://satou-aaaaa.github.io/okane-kihon/og.png" && og("twitter:card") === "summary_large_image" && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630); }
@@ -128,7 +145,7 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
 try { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   { const st = await checkSwStall(sw); check("PWA：本文の途中で通信が止まっても4秒で保存したものを返す・ふつうはネットの返事", st.ok, JSON.stringify(st)); }
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
-  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、外へ何も送らない", ["./index.html", "./gen.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js・深さの depth.js も）、外へ何も送らない", ["./index.html", "./gen.js", "./transfer.js", "./depth.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "お金のきほん" && mf.icons.length >= 2 && mf.start_url === "./"); }
 catch (e) { check("PWA：sw.js と manifest.webmanifest を読めて形式が正しい", false, e.message.split("\n")[0]); }
 
@@ -342,6 +359,44 @@ try {
     await ctx.close();
   }
 
+  // 1問を深くする（shared-workflows routines/game-dev.md「1問を深くする」）：自信をかける・ひねりの1問・復習
+  {
+    const q = await newPage(); await closeHow(q);
+    await q.evaluate((tags) => __km.save((s) => { s.runs.p = { mode: "p", date: __km.todayKey(), list: tags, res: [], cur: null, id: "dp" }; }), ["rishizei|dp1", "sub|dp2", "tax|dp3"]);
+    await q.evaluate(() => __km.play("p"));
+    check("ひねりの問題は「ひねりの1問」と出る", (await q.textContent("#twist")).includes("ひねり"));
+    const sb = await q.$eval("#dp-sure", (b) => [b.getBoundingClientRect().height, b.getAttribute("aria-pressed")]);
+    check("自信のボタン：高さ44px以上・はじめは押していない", sb[0] >= 44 && sb[1] === "false", sb.join(","));
+    await q.click("#dp-sure");
+    check("自信のボタンを押すと ✓ が出る（色だけで分けない）", (await q.getAttribute("#dp-sure", "aria-pressed")) === "true" && (await q.textContent("#dp-sure")).includes("✓"));
+    await q.click(`.ch[data-j="${await wrongIdx(q)}"]`);
+    check("自信ありでまちがえると「思いこみ」と出て、自信は変えられない", (await q.textContent("#msg")).includes("思いこみ") && await q.locator("#dp-sure:disabled").count() === 1);
+    await q.reload(); await q.waitForTimeout(150); await q.evaluate(() => __km.play("p"));
+    await solve(q);
+    check("開き直しても、自信ありでまちがえたことが正解の画面に出る", (await q.textContent(".verdict")).includes("自信ありでまちがえた"));
+    await q.click("#next"); await q.click("#dp-sure"); await solve(q); await q.click("#next");
+    await solve(q); await q.click("#next"); await q.waitForTimeout(150);
+    check("終えた直後の結果に「自信ありの当たり 1/2」", (await q.textContent("#surestat")).includes("1/2"));
+    const dp = await q.evaluate(() => JSON.parse(localStorage.getItem("okane-depth") || "{}"));
+    check("まちがえた問題だけ復習に入る", Object.keys(dp.rv || {}).join() === "rishizei|dp1", Object.keys(dp.rv || {}).join());
+    await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("okane-depth")); for (const k in d.rv) d.rv[k].due = "2026-01-01"; localStorage.setItem("okane-depth", JSON.stringify(d)); });
+    await q.goto(url); await q.waitForTimeout(150);
+    check("日の来た復習があると、ホームに「復習 1問」", (await q.textContent("#go-r")).includes("復習 1問"));
+    const before = await mem(q);
+    await q.click("#go-r");
+    check("復習の画面は「復習」と出る", (await q.textContent("header")).includes("復習"));
+    await solve(q); await q.click("#next"); await q.waitForTimeout(150);
+    const after = await mem(q), dp2 = await q.evaluate(() => JSON.parse(localStorage.getItem("okane-depth")));
+    check("復習を終えると結果は「復習」・今日の記録は増えない", (await q.textContent("h1")).includes("復習") && JSON.stringify(after.days) === JSON.stringify(before.days));
+    check("復習で一度で正解すると、次は3日後へ進む", Object.values(dp2.rv).every((x) => x.s === 1 && x.due > TODAY));
+    await q.goto(url); await q.waitForTimeout(150);
+    check("復習を終えたら、ホームの「復習」は消える", await q.locator("#go-r").count() === 0);
+    // 引き継ぎなどで作り直せない鍵が入っても、ホームは止まらず数えない（2026-11-11 CodeRabbit）
+    await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("okane-depth")); d.rv["nai|1"] = { s: 0, due: "2026-01-01", t: 1 }; d.rv["constructor|x"] = { s: 0, due: "2026-01-01", t: 2 }; localStorage.setItem("okane-depth", JSON.stringify(d)); });
+    await q.goto(url); await q.waitForTimeout(150);
+    check("作り直せない鍵（無い種類・constructor）は復習に数えず、ホームも出る", await q.locator("#go-d").count() === 1 && await q.locator("#go-r").count() === 0);
+    await q.context().close();
+  }
   // スマホ幅・とても大きい文字でもはみ出さない・押す所は44px以上
   {
     const bad = [], small = [];
@@ -381,6 +436,9 @@ try {
     await q.context().close();
   }
 } catch (e) { check("ブラウザでの検査が最後まで動く", false, e.stack.split("\n").slice(0, 3).join(" ")); }
+
+// 深さの部品（shared-workflows template/qa/depth-check.mjs）
+{ const e = await checkDepth(readFileSync(path.join(root, "depth.js"), "utf8")); check("depth.js（自信をかける・復習）の動き", e.length === 0, e.join(" / ")); }
 
 // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
 try {
