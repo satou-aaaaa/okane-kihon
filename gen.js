@@ -134,6 +134,19 @@
       const [B, X] = pick(R, LN), r = 18, x = ribo(B, X, r), ans = r100(x.fee);
       return { scene: [["借りるお金", man(B)], ["返し方", `毎月${yen(X)}（利息こみ）`], ["金利", `年${r}%`]], q: "払う利息の合計はおよそいくら？", unit: "yen", approx: true, ans, opts: opts(R, ans, [(B * r) / 100, ans * 2, ans / 2], r100),
         why: `${x.months}か月かかり、利息は合わせて約${yen(ans)}。借りた額の約${Math.round((x.fee / B) * 100)}%です。`, parts: [["借りたお金", B], ["利息", ans]], p: { B, X, r } }; } },
+    // ---- ひねり（2つの決まりが重なる。今日の5問の4問目に TWIST_FROM の日から出す。kindsOf には入れない）----
+    { id: "taxmix", lv: 1, tw: true, name: "8%と10%をいっしょに買う", look: "食べ物は8%、それ以外は10%。別々に計算してたします。", make(R) {
+      const fd = TAXI.filter((x) => x[1]), nf = TAXI.filter((x) => !x[1]), [a] = pick(R, fd), [b] = pick(R, nf), pa = 100 * ri(R, 3, 30), pb = 100 * ri(R, 3, 30), ans = (pa * 108 + pb * 110) / 100;
+      return { scene: [["買う物1", `${a} ${yen(pa)}`], ["買う物2", `${b} ${yen(pb)}`], ["値段", "どちらも税ぬき"], ["いつ", "2026年11月"]], q: "税こみの合計は？", unit: "yen", ans, opts: opts(R, ans, [((pa + pb) * 110) / 100, ((pa + pb) * 108) / 100, (pa * 110 + pb * 108) / 100], Math.round, 0.005),
+        why: `${yen(pa)}×1.08＋${yen(pb)}×1.1＝${yen(ans)}。税率は品ごとに分けます。`, p: { pa, pb } }; } },
+    { id: "rishizei", lv: 1, tw: true, name: "利息から税金が引かれる", look: "まず1年の利息を出し、そこから約2割の税金を引きます。", make(R) {
+      const P = 100000 * ri(R, 2, 30), r = pick(R, [1, 2, 3]), I = (P * r) / 100, ans = afterTax(I);
+      return { scene: [["預けるお金", man(P)], ["金利", `年${r}%`], ["預ける期間", "1年"], ["税金", "20.315%"]], q: "1年で手もとに入る利息は？", unit: "yen", ans, opts: opts(R, ans, [I, I * 0.85, I - Math.floor((I * 5) / 100)], Math.round),
+        why: `利息は${man(P)}×${r}%＝${yen(I)}。税金を引いて${yen(ans)}です。`, parts: [["手もと", ans], ["税金", I - ans]], p: { P, r } }; } },
+    { id: "chokinsub", lv: 1, tw: true, name: "月ぎめを払いながら貯める", look: "毎月残せる額から、月ぎめの料金を引いてから考えます。", make(R) {
+      const D = pick(R, [5000, 7000, 8000, 9000, 12000]), Y = pick(R, [1000, 2000, 3000]), X = D + Y, n = ri(R, 6, 24), T = D * n, s0 = pick(R, SUBS), [g] = pick(R, GOALS);
+      return { scene: [["目標", `${g} ${yen(T)}`], ["毎月残せるお金", yen(X)], ["月ぎめ", `${s0} 月${yen(Y)}`]], q: "月ぎめを払いながら、何か月で目標に届く？", unit: "month", ans: n, opts: iopts(R, n, [Math.ceil(T / X), n + 4, Math.ceil(T / (X + Y))]),
+        why: `毎月貯まるのは${yen(X)}－${yen(Y)}＝${yen(D)}。${yen(T)}÷${yen(D)}＝${n}か月です。`, p: { T, X, Y } }; } },
   ];
   // 複利・物価の (年率, 年数)：単利との差が5%以上あるものだけ（思いちがいの選び肢が答えと見分けられるように）
   const FK = [], IF = [], RB = [], BR = [], LN = [];
@@ -145,7 +158,11 @@
   for (const [B, X] of RB) { if (ribo(B, X, 15).total - bunkatsu(B, 12, 15).total >= 3000) BR.push([B, X]); }
 
   const BY = Object.fromEntries(KINDS.map((k) => [k.id, k]));
-  const kindsOf = (lv) => KINDS.filter((k) => k.lv === lv).map((k) => k.id);
+  const kindsOf = (lv) => KINDS.filter((k) => k.lv === lv && !k.tw).map((k) => k.id);
+  // ひねりの種類（今日の5問の4問目。起承転結の「転」。shared-workflows routines/game-dev.md「1問を深くする」研究21・22）
+  const twistKinds = () => KINDS.filter((k) => k.tw).map((k) => k.id);
+  // この日から4問目をひねりにする（前の日の問題は変えない。F7）
+  const TWIST_FROM = "2026-11-14";
 
   function seedOf(str) { let h = 2166136261; for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -171,6 +188,7 @@
   // 今日の5問（やさしい2・ふつう2・むずかしい1）。種類は重ねない
   function dailyTags(date) {
     const R = rng(seedOf("day:" + date)), e = pickN(R, kindsOf(0), 2), n = pickN(R, kindsOf(1), 2), h = pickN(R, kindsOf(2), 1);
+    if (date >= TWIST_FROM) n[1] = pickN(rng(seedOf("twist:" + date)), twistKinds(), 1)[0]; // ほかの4問の選び方は変えない
     return [...e, ...n, ...h].map((id, i) => `${id}|${date}:d${i}`);
   }
   // 上級の3問（むずかしいだけ・今日の5問のむずかしいとは別の種類）
@@ -179,6 +197,6 @@
     return h.map((id, i) => `${id}|${date}:h${i}`);
   }
 
-  const OKANE = { KINDS, BY, LV, kindsOf, seedOf, rng, make, fmt, yen, comma, dailyTags, hardTags, pickN, calc: { bunkatsu, ribo, fukuri, tsumitate, afterTax, seigen }, TABLES: { FK, IF, RB, BR, LN } };
+  const OKANE = { KINDS, BY, LV, kindsOf, twistKinds, TWIST_FROM, seedOf, rng, make, fmt, yen, comma, dailyTags, hardTags, pickN, calc: { bunkatsu, ribo, fukuri, tsumitate, afterTax, seigen }, TABLES: { FK, IF, RB, BR, LN } };
   if (typeof module !== "undefined" && module.exports) module.exports = OKANE; else root.OKANE = OKANE;
 })(typeof self !== "undefined" ? self : this);
