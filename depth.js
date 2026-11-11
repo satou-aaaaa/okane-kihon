@@ -1,5 +1,5 @@
 // 深さの部品（depth.js）：1問の中に2つ目の判断を足す「自信をかける」と、まちがえた問題が間をあけて戻る「復習」。
-// 深さの版: 2
+// 深さの版: 3
 // 正：satou-aaaaa/shared-workflows の template/depth.js（各ゲームはこれをそのまま写す。直すときはひな形を直して配り、版を上げる）
 // 考え（routines/game-dev.md「1問を深くする」）:
 //   - 自信をかける：答える前に「たしか」を押せる（押さなければ「たぶん」）。自分の見立てが当たったかが2つ目の勝負になる。
@@ -33,6 +33,13 @@
   var kindOf = typeof cfg.kindOf === "function" ? cfg.kindOf : function (k) { return String(k).split("|")[0]; };
   var valid = function () { return true; }; // 作り直せる鍵か（ゲームが setValid で渡す）
   var mem = null; // 保存できないあいだの控え
+  // 復習の控えが残っているあいだは、ゲーム本体の保存がうまくいっても帯を消さない（2026-11-11 CodeRabbit、版3）
+  var held = false;
+  function hold() {
+    if (held || typeof window.saveWarn !== "function") return;
+    var orig = window.saveWarn; held = true;
+    window.saveWarn = function (on) { return orig(on || mem !== null); };
+  }
   var last = null; // いまの問題の { key, sure, ok }（自信ありでまちがえたら、mark で復習に入れる）
   var today = function () { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); };
   var addDays = function (d, n) { return new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10); };
@@ -74,7 +81,7 @@
     var s = read();
     fn(s);
     var j = JSON.stringify(s);
-    try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; if (typeof window.saveWarn === "function") { try { window.saveWarn(true); } catch (e2) {} } }
+    try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; hold(); if (typeof window.saveWarn === "function") { try { window.saveWarn(true); } catch (e2) {} } }
     return s;
   }
 
