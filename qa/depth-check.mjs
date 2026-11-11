@@ -7,7 +7,7 @@
 //   notyet:  日の来ていない復習・復習に入っていない問題は、正解しても動かない
 //   sure:    自信ありでまちがえた問題は、まちがいの数が0でも復習に入る。judge は1問に1回だけ（2回目は null）。数は stats に残る
 //   mix:     今日出す復習は種類が続かない・多くて10問
-//   nosave:  保存に失敗しても開いているあいだは覚え、saveWarn(true) を呼ぶ。保存できるようになったら合わせて書く
+//   nosave:  保存に失敗しても開いているあいだは覚え、saveWarn(true) を呼ぶ。控えがあるあいだはゲームの saveWarn(false) で帯を消さない。保存できるようになったら合わせて書く
 //   junk:    壊れた記録（配列・文字・変な日付）でも止まらず、空の形に直す
 //   proto:   鍵が constructor・__proto__・toString でも止まらず、ふつうの鍵として数える（2026-11-11 CodeRabbit）
 //   valid:   setValid で作り直せないと言われた鍵は数えず、出さない（引き継ぎで入った・種類が消えた鍵）
@@ -37,12 +37,12 @@ function boot(code, { ls = store(), now = Date.parse("2026-11-11T03:00:00Z") } =
     head: { appendChild() {} }, documentElement: { appendChild() {} },
     getElementById: (id) => els[id] || null, createElement: () => ({}), addEventListener() {},
   };
-  const warn = { n: 0 };
-  const window = { saveWarn: (on) => { if (on) warn.n++; } };
+  const warn = { n: 0, on: false };
+  const window = { saveWarn: (on) => { if (on) warn.n++; warn.on = !!on; } };
   const ctx = { window, document, localStorage: ls, Date: FakeDate, JSON, Math, Number, String, Object, Array };
   vm.runInNewContext(code, ctx);
   const D = window.Depth;
-  return { D, ls, warn, els, day: (n) => { clock.t += n * 864e5; } };
+  return { D, ls, warn, els, window, day: (n) => { clock.t += n * 864e5; } };
 }
 
 export async function checkDepth(code) {
@@ -104,8 +104,12 @@ export async function checkDepth(code) {
     ls.break(true); t.D.mark("n|1", 1);
     ok("nosave: 保存できなくても覚えている", t.D.waiting() === 1);
     ok("nosave: saveWarn(true) を呼ぶ", t.warn.n >= 1);
+    t.window.saveWarn(false);
+    ok("nosave: 復習の控えがあるあいだは、ゲームの保存がうまくいっても帯を消さない", t.warn.on === true);
     ls.break(false); t.D.mark("n|2", 1);
     ok("nosave: 保存できたら控えと合わせて書く", Object.keys(JSON.parse(ls.getItem("t-depth")).rv).length === 2);
+    t.window.saveWarn(false);
+    ok("nosave: 控えを書けたら、ゲームの保存で帯が消える", t.warn.on === false);
 
     // junk
     for (const v of ['[1,2]', '"x"', '{"rv":[1],"sure":"a"}', '{"rv":{"k":{"due":"2026-99-99","s":9}},"sure":-3,"sureOk":5}', "{bad"]) {
