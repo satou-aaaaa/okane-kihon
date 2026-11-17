@@ -278,6 +278,22 @@ try {
   check("とことん：並びを使い切る前に問題を足して続ける・1回の中で同じ問題を出さない", el.length > n0 && new Set(keys).size === keys.length && await p.locator(".ch").count() === 4, `${n0}→${el.length}`);
   await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で終わり、自己ベストとまちがい・ヒントの回数を出す", await p.locator("#eres").count() === 1 && (await mem(p)).ebest === n0 - 2 && (await p.textContent("#emiss")).includes("まちがい・ヒント"));
+  // 正解した直後（次へを押す前）でも「ここで降りる」で終われ、その1問が数に入る（前は正解のあと押しても何も起きなかった）
+  await p.click("#go-e"); await solve(p);
+  check("とことん：正解した直後に「ここで降りる」を押すと結果になり、その1問が数に入る", await p.locator("#quit").evaluate((b) => b.textContent.includes("1問で終える")) && (await p.click("#quit"), await p.waitForTimeout(150), await p.locator("#eres").count() === 1) && (await p.textContent("#eres")).includes("1問") && (await p.textContent("#emiss")).includes("一度で正解 1問") && (await mem(p)).runs.e === null);
+  {
+    // 保存できないブラウザ：帯で知らせ、知らせ続け、保存できたら消す（前は黙って開き直すと記録が消えた）
+    const sctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    await sctx.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
+    const q = await newPage(390, sctx); await closeHow(q); await q.click("#go-d"); await solve(q);
+    const one = await q.locator("#savewarn").count() === 1 && (await q.textContent("#savewarn")).includes("保存できませんでした");
+    await q.waitForTimeout(2000);
+    const stay = await q.locator("#savewarn").count() === 1;
+    await q.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
+    await q.click("#next"); await solve(q); await q.click("#next"); await solve(q); // 1問目で復習の控え（depth.js）も保存し直し、2問目の保存で帯が消える
+    check("保存できないと帯がちょうど1つ出て2秒たっても残り、保存できるようになったら消える", one && stay && await q.locator("#savewarn").count() === 0, `one=${one} stay=${stay}`);
+    await sctx.close();
+  }
   {
     // とことんの並びを何百回も作って、1回の中で重ならない・作れない問題が無いかを見る（5回では小さな重なりに当たらない）
     const r = await p.evaluate(() => { let dup = 0, badLen = 0, rep = 0; for (let t = 0; t < 300; t++) { let l = __km.endlessList(); for (let k = 0; k < 2; k++) l = l.concat(__km.moreList(l)); const ks = l.map(__km.probKey); if (new Set(ks).size !== ks.length) dup++; if (l.length !== 80) badLen++; for (let i = 1; i < l.length; i++) if (l[i].split("|")[0] === l[i - 1].split("|")[0]) rep++; } return [dup, badLen, rep]; });
