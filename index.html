@@ -634,7 +634,7 @@ function play() {
     <div id="after"></div>`;
   $("back").onclick = home;
   document.querySelectorAll(".ch").forEach((b) => (b.onclick = () => choose(+b.dataset.j)));
-  Depth.bindSure(tag);
+  Depth.bindSure(tag, cur.id + "|" + cur.i);
   if ($("hint")) $("hint").onclick = hint;
   if ($("quit")) $("quit").onclick = () => finish(); // 正解の直後（次へを押す前）でも降りられる。正解は choose で保存ずみなので数に入る
   paint();

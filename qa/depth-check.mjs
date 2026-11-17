@@ -6,6 +6,7 @@
 //   gaps:    まちがえた問題は今日は出ず、1日後に出る。正解で 3日後 → 7日後 → 「覚えた」。復習でまちがえたら1日後に戻る
 //   notyet:  日の来ていない復習・復習に入っていない問題は、正解しても動かない
 //   sure:    自信ありでまちがえた問題は、まちがいの数が0でも復習に入る。judge は1問に1回だけ（2回目は null）。数は stats に残る
+//   tabs:    回の印（bindSure の2つ目）が同じなら、別のタブ・開き直したあとで答えても judge は1回だけ数える（版5、shared-workflows #352）
 //   mix:     今日出す復習は種類が続かない・多くて10問
 //   nosave:  保存に失敗しても開いているあいだは覚え、saveWarn(true) を呼ぶ。控えがあるあいだはゲームの saveWarn(false) で帯を消さない。保存できるようになったら合わせて書く
 //   nosave-del: 保存に失敗したまま「覚えた」で消した項目を、保存できるようになったとき戻さない・覚えた数を重ねない（版4）
@@ -89,6 +90,21 @@ export async function checkDepth(code) {
     ok("sure: 1回分の数（3問・自信あり2・当たり1）", rs.n === 3 && rs.sure === 2 && rs.sureOk === 1);
     ok("sure: 通しの数が残る", st.sure === 2 && st.sureOk === 1);
     ok("sure: 押さなければ「たぶん」のまま（自信ありに数えない）", rs.sure === 2);
+
+    // tabs：2つのタブ（同じ localStorage の2つの depth.js）で同じ回の同じ問題に「自信あり」で答える
+    {
+      const lsT = store();
+      const A = boot(code, { ls: lsT }), B = boot(code, { ls: lsT });
+      for (const x of [A, B]) { x.els["dp-sure"] = { setAttribute() {}, onclick: null }; x.D.bindSure("t|1", "run1|0"); x.els["dp-sure"].onclick(); }
+      const ja = A.D.judge(true), jb = B.D.judge(true);
+      ok("tabs: 先に答えたタブだけ数える", !!ja && ja.sure === true && jb === null);
+      ok("tabs: 通しの自信ありは1つ", A.D.stats().sure === 1 && A.D.stats().sureOk === 1);
+      const C = boot(code, { ls: lsT }); C.els["dp-sure"] = { setAttribute() {}, onclick: null }; C.D.bindSure("t|1", "run1|0"); C.els["dp-sure"].onclick();
+      ok("tabs: 開き直したあとも、同じ回の同じ問題は数えない", C.D.judge(false) === null && C.D.stats().sure === 1);
+      C.D.bindSure("t|1", "run2|0"); C.els["dp-sure"].onclick();
+      ok("tabs: 別の回なら同じ問題でも数える", !!C.D.judge(true) && C.D.stats().sure === 2);
+      const D = boot(code, { ls: lsT }); D.D.bindSure("t|9"); ok("tabs: 回の印が無いときは今までどおり", !!D.D.judge(true));
+    }
 
     // mix
     t = boot(code);
