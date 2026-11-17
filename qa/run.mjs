@@ -471,6 +471,10 @@ try {
   const sample = { "okane-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-05": { m: [0, 1, 0, 0, 2], k: ["week", "add", "clock", "kana2", "alt"] } }, hdays: {}, adays: {}, dex: { week: 1, add: 1, clock: 1, kana2: 1, alt: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }), "okane-fs": "3" };
   await checkTransfer({ browser, url, game: "okane-kihon", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+{ // 知らせ（.toast）は下のボタンを塞がない（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
+  const pt = await browser.newPage(); await pt.goto(url);
+  check("知らせ（.toast）が出ていても、その下のボタンを押せる（pointer-events:none）", await pt.evaluate(() => { const d = document.createElement("div"); d.className = "toast"; document.body.appendChild(d); const v = getComputedStyle(d).pointerEvents; d.remove(); return v === "none"; }));
+  await pt.close(); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
